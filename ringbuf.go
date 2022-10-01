@@ -58,6 +58,7 @@ func (rb *RingBuf) End() int64 {
 	return rb.end
 }
 
+// [0 0 e 0 0 b 0 0 0]
 // read up to len(p), at off of the data stream.
 func (rb *RingBuf) ReadAt(p []byte, off int64) (n int, err error) {
 	if off > rb.end || off < rb.begin {
@@ -153,15 +154,19 @@ func (rb *RingBuf) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
+// EqualAt 判断 key(p) 是否与  rb中 偏移量为 off的key 相等.
+// 对于key被拆开的场景特殊处理(循环覆盖写 )
 func (rb *RingBuf) EqualAt(p []byte, off int64) bool {
 	if off+int64(len(p)) > rb.end || off < rb.begin {
 		return false
 	}
 	readOff := rb.getDataOff(off)
 	readEnd := readOff + len(p)
+	// 大多数场景下:
 	if readEnd <= len(rb.data) {
 		return bytes.Equal(p, rb.data[readOff:readEnd])
 	} else {
+		// 发生了循环覆盖写. 数据被拆开了
 		firstLen := len(rb.data) - readOff
 		equal := bytes.Equal(p[:firstLen], rb.data[readOff:])
 		if equal {

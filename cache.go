@@ -10,14 +10,15 @@ import (
 
 const (
 	// segmentCount represents the number of segments within a freecache instance.
-	segmentCount = 256
+	segmentCount = 256 // 1<< 8
 	// segmentAndOpVal is bitwise AND applied to the hashVal to find the segment id.
-	segmentAndOpVal = 255
-	minBufSize      = 512 * 1024
+	segmentAndOpVal = 255        // segment 用于 取余操作 segmentCount - 1 = (1<< 8) -1
+	minBufSize      = 512 * 1024 // == segmentCount * len(ringBuf.data) = 512k
 )
 
 // Cache is a freecache instance.
 type Cache struct {
+	// 减小锁粒度, 每个 segment 一把锁
 	locks    [segmentCount]sync.Mutex
 	segments [segmentCount]segment
 }
@@ -44,6 +45,7 @@ func NewCacheCustomTimer(size int, timer Timer) (cache *Cache) {
 		timer = defaultTimer{}
 	}
 	cache = new(Cache)
+	// 初始化 每一个  segment
 	for i := 0; i < segmentCount; i++ {
 		cache.segments[i] = newSegment(size/segmentCount, i, timer)
 	}
@@ -56,6 +58,7 @@ func NewCacheCustomTimer(size int, timer Timer) (cache *Cache) {
 // but it can be evicted when cache is full.
 func (cache *Cache) Set(key, value []byte, expireSeconds int) (err error) {
 	hashVal := hashFunc(key)
+	// 通过 位运算 计算取余操作
 	segID := hashVal & segmentAndOpVal
 	cache.locks[segID].Lock()
 	err = cache.segments[segID].set(key, value, hashVal, expireSeconds)
